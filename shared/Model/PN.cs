@@ -1,12 +1,12 @@
 namespace shared.Model;
 
 public class PN : Ordination {
-	public double antalEnheder { get; set; }
+    public double antalEnheder { get; set; }
     public List<Dato> dates { get; set; } = new List<Dato>();
 
     public PN (DateTime startDen, DateTime slutDen, double antalEnheder, Laegemiddel laegemiddel) : base(laegemiddel, startDen, slutDen) {
-		this.antalEnheder = antalEnheder;
-	}
+        this.antalEnheder = antalEnheder;
+    }
 
     public PN() : base(null!, new DateTime(), new DateTime()) {
     }
@@ -17,13 +17,24 @@ public class PN : Ordination {
     /// Returner false ellers og datoen givesDen ignoreres
     /// </summary>
     public bool givDosis(Dato givesDen) {
-        // TODO: Implement!
+        // Både start- og slutdato regnes som gyldige for PN (sammenlignes uden klokkeslæt)
+        if (givesDen.dato.Date >= startDen.Date && givesDen.dato.Date <= slutDen.Date) {
+            dates.Add(givesDen);
+            return true;
+        }
         return false;
     }
 
     public override double doegnDosis() {
-    	// TODO: Implement!
-        return -1;
+        if (dates.Count == 0) {
+            return 0;
+        }
+
+        DateTime foerste = dates.Min(d => d.dato.Date);
+        DateTime sidste = dates.Max(d => d.dato.Date);
+        int antalDage = (sidste - foerste).Days + 1; // begge dage er inklusive
+
+        return (dates.Count * antalEnheder) / antalDage;
     }
 
 
@@ -35,7 +46,7 @@ public class PN : Ordination {
         return dates.Count();
     }
 
-	public override String getType() {
-		return "PN";
-	}
+    public override String getType() {
+        return "PN";
+    }
 }

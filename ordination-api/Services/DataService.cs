@@ -130,27 +130,80 @@ public class DataService
         return db.Laegemiddler.ToList();
     }
 
+    private Patient HentPatient(int patientId) {
+        Patient? patient = db.Patienter.Include(p => p.ordinationer).FirstOrDefault(p => p.PatientId == patientId);
+        if (patient == null) {
+            throw new ArgumentException("Patienten findes ikke.");
+        }
+        return patient;
+    }
+
+    private Laegemiddel HentLaegemiddel(int laegemiddelId) {
+        Laegemiddel? laegemiddel = db.Laegemiddler.FirstOrDefault(l => l.LaegemiddelId == laegemiddelId);
+        if (laegemiddel == null) {
+            throw new ArgumentException("Lægemidlet findes ikke.");
+        }
+        return laegemiddel;
+    }
+
+    private static void TjekDatoer(DateTime startDato, DateTime slutDato) {
+        // Slutdato skal være senere end startdato (de må ikke være ens)
+        if (startDato.Date >= slutDato.Date) {
+            throw new ArgumentException("Startdato skal være før slutdato.");
+        }
+    }
+
+    private void GemOrdination(Patient patient, Ordination ordination) {
+        db.Ordinationer.Add(ordination);
+        patient.ordinationer.Add(ordination);
+        db.SaveChanges();
+    }
+
     public PN OpretPN(int patientId, int laegemiddelId, double antal, DateTime startDato, DateTime slutDato) {
-        // TODO: Implement!
-        return null!;
+        TjekDatoer(startDato, slutDato);
+        Patient patient = HentPatient(patientId);
+        Laegemiddel laegemiddel = HentLaegemiddel(laegemiddelId);
+
+        PN pn = new PN(startDato, slutDato, antal, laegemiddel);
+        GemOrdination(patient, pn);
+        return pn;
     }
 
     public DagligFast OpretDagligFast(int patientId, int laegemiddelId, 
         double antalMorgen, double antalMiddag, double antalAften, double antalNat, 
         DateTime startDato, DateTime slutDato) {
 
-        // TODO: Implement!
-        return null!;
+        TjekDatoer(startDato, slutDato);
+        Patient patient = HentPatient(patientId);
+        Laegemiddel laegemiddel = HentLaegemiddel(laegemiddelId);
+
+        DagligFast dagligFast = new DagligFast(startDato, slutDato, laegemiddel,
+            antalMorgen, antalMiddag, antalAften, antalNat);
+        GemOrdination(patient, dagligFast);
+        return dagligFast;
     }
 
     public DagligSkæv OpretDagligSkaev(int patientId, int laegemiddelId, Dosis[] doser, DateTime startDato, DateTime slutDato) {
-        // TODO: Implement!
-        return null!;
+        TjekDatoer(startDato, slutDato);
+        Patient patient = HentPatient(patientId);
+        Laegemiddel laegemiddel = HentLaegemiddel(laegemiddelId);
+
+        DagligSkæv dagligSkaev = new DagligSkæv(startDato, slutDato, laegemiddel, doser);
+        GemOrdination(patient, dagligSkaev);
+        return dagligSkaev;
     }
 
     public string AnvendOrdination(int id, Dato dato) {
-        // TODO: Implement!
-        return null!;
+        PN? pn = db.PNs.Include(o => o.dates).FirstOrDefault(o => o.OrdinationId == id);
+        if (pn == null) {
+            return "Ordinationen findes ikke.";
+        }
+
+        if (pn.givDosis(dato)) {
+            db.SaveChanges();
+            return "Dosis registreret.";
+        }
+        return "Datoen er uden for ordinationens gyldighedsperiode.";
     }
 
     /// <summary>
@@ -161,8 +214,30 @@ public class DataService
     /// <param name="laegemiddel"></param>
     /// <returns></returns>
 	public double GetAnbefaletDosisPerDøgn(int patientId, int laegemiddelId) {
-        // TODO: Implement!
-        return -1;
+        Patient patient = HentPatient(patientId);
+        Laegemiddel laegemiddel = HentLaegemiddel(laegemiddelId);
+
+        double faktor;
+        if (patient.vaegt < 25) {
+            faktor = laegemiddel.enhedPrKgPrDoegnLet;
+        } else if (patient.vaegt > 120) {
+            faktor = laegemiddel.enhedPrKgPrDoegnTung;
+        } else {
+            faktor = laegemiddel.enhedPrKgPrDoegnNormal;
+        }
+
+        return patient.vaegt * faktor;
+	}
+
+    /// <summary>
+    /// Ekstraopgave: antal ordinationer givet med et bestemt lægemiddel til patienter,
+    /// hvis vægt ligger i intervallet [vægtStart, vægtSlut].
+    /// </summary>
+    public int AntalOrdinationerPrVægtPrLægemiddel(double vægtStart, double vægtSlut, int laegemiddelId) {
+        return db.Patienter
+            .Where(p => p.vaegt >= vægtStart && p.vaegt <= vægtSlut)
+            .SelectMany(p => p.ordinationer)
+            .Count(o => o.laegemiddel.LaegemiddelId == laegemiddelId);
 	}
     
 }
